@@ -383,6 +383,462 @@ app.post('/api/trigger-sessions', async (req, res) => {
   }
 });
 
+// ==================== ADMIN DASHBOARD ====================
+// Serve admin page
+app.get('/admin', (req, res) => {
+  res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tutor Connect Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            background: #f0f2f5; 
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: auto; }
+        h1 { color: #1a5f7a; margin-bottom: 30px; display: flex; align-items: center; gap: 10px; }
+        h1 span { background: #1a5f7a; color: white; padding: 5px 15px; border-radius: 20px; font-size: 16px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .card { 
+            background: white; 
+            padding: 25px; 
+            border-radius: 15px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .card:hover { transform: translateY(-2px); }
+        h2 { color: #2c3e50; margin-bottom: 20px; font-size: 20px; display: flex; align-items: center; gap: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: #4a5568; font-weight: 500; }
+        input, select { 
+            width: 100%; 
+            padding: 12px; 
+            border: 2px solid #e2e8f0; 
+            border-radius: 8px; 
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        input:focus, select:focus { outline: none; border-color: #1a5f7a; }
+        button { 
+            background: #1a5f7a; 
+            color: white; 
+            border: none; 
+            padding: 12px 25px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-size: 16px;
+            font-weight: 600;
+            transition: background 0.2s;
+            width: 100%;
+        }
+        button:hover { background: #0f4a61; }
+        button.secondary { background: #2d3748; }
+        button.secondary:hover { background: #1a202c; }
+        button.success { background: #38a169; }
+        button.success:hover { background: #2f855a; }
+        .checkbox-group { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); 
+            gap: 10px; 
+            margin: 10px 0;
+        }
+        .checkbox-group label { 
+            display: flex; 
+            align-items: center; 
+            gap: 5px; 
+            font-weight: normal;
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            background: white; 
+            border-radius: 10px; 
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        th { 
+            background: #1a5f7a; 
+            color: white; 
+            padding: 15px; 
+            text-align: left;
+        }
+        td { 
+            padding: 12px 15px; 
+            border-bottom: 1px solid #e2e8f0;
+        }
+        tr:hover { background: #f7fafc; }
+        .badge {
+            background: #e2e8f0;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #1a5f7a;
+        }
+        .stat-label {
+            color: #4a5568;
+            font-size: 14px;
+        }
+        .message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            display: none;
+            z-index: 1000;
+        }
+        .message.success { background: #38a169; }
+        .message.error { background: #e53e3e; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            📚 Tutor Connect Admin 
+            <span id="liveStatus">Live</span>
+        </h1>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="totalStudents">0</div>
+                <div class="stat-label">Students</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalTutors">0</div>
+                <div class="stat-label">Tutors</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="todaySessions">0</div>
+                <div class="stat-label">Today's Sessions</div>
+            </div>
+        </div>
+        
+        <div class="grid">
+            <!-- Add Student Card -->
+            <div class="card">
+                <h2>➕ Add Student</h2>
+                <div class="form-group">
+                    <label>Student Name</label>
+                    <input type="text" id="studentName" placeholder="e.g., Ali Ahmed">
+                </div>
+                <div class="form-group">
+                    <label>Parent Name</label>
+                    <input type="text" id="parentName" placeholder="e.g., Mr. Khan">
+                </div>
+                <div class="form-group">
+                    <label>Parent WhatsApp (with country code)</label>
+                    <input type="text" id="parentPhone" placeholder="e.g., 923001234567">
+                </div>
+                <div class="form-group">
+                    <label>Age</label>
+                    <input type="number" id="age" placeholder="e.g., 10">
+                </div>
+                <div class="form-group">
+                    <label>Level</label>
+                    <select id="level">
+                        <option value="Beginner">Beginner</option>
+                        <option value="Intermediate">Intermediate</option>
+                        <option value="Advanced">Advanced</option>
+                    </select>
+                </div>
+                <button onclick="addStudent()">Add Student</button>
+            </div>
+            
+            <!-- Add Tutor Card -->
+            <div class="card">
+                <h2>👨‍🏫 Add Tutor</h2>
+                <div class="form-group">
+                    <label>Tutor Name</label>
+                    <input type="text" id="tutorName" placeholder="e.g., Qari Ahmed">
+                </div>
+                <div class="form-group">
+                    <label>WhatsApp Number</label>
+                    <input type="text" id="tutorPhone" placeholder="e.g., 923001234567">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="tutorEmail" placeholder="ahmed@example.com">
+                </div>
+                <div class="form-group">
+                    <label>Availability</label>
+                    <div class="checkbox-group">
+                        <label><input type="checkbox" value="Monday"> Mon</label>
+                        <label><input type="checkbox" value="Tuesday"> Tue</label>
+                        <label><input type="checkbox" value="Wednesday"> Wed</label>
+                        <label><input type="checkbox" value="Thursday"> Thu</label>
+                        <label><input type="checkbox" value="Friday"> Fri</label>
+                        <label><input type="checkbox" value="Saturday"> Sat</label>
+                    </div>
+                </div>
+                <button onclick="addTutor()">Add Tutor</button>
+            </div>
+            
+            <!-- Assign & Trigger Card -->
+            <div class="card">
+                <h2>📋 Assign Tutor</h2>
+                <div class="form-group">
+                    <label>Select Student</label>
+                    <select id="assignStudent"></select>
+                </div>
+                <div class="form-group">
+                    <label>Select Tutor</label>
+                    <select id="assignTutor"></select>
+                </div>
+                <button onclick="assignTutor()" class="secondary">Assign</button>
+                
+                <hr style="margin: 20px 0;">
+                
+                <h2>🎯 Manual Trigger</h2>
+                <button onclick="triggerSessions()" class="success">Create Sessions Now</button>
+            </div>
+        </div>
+        
+        <!-- Students Table -->
+        <div class="card" style="margin-top: 20px;">
+            <h2>📋 Students List</h2>
+            <table>
+                <thead>
+                    <tr><th>Name</th><th>Parent</th><th>Phone</th><th>Level</th><th>Tutor</th></tr>
+                </thead>
+                <tbody id="studentsTable"></tbody>
+            </table>
+        </div>
+        
+        <!-- Tutors Table -->
+        <div class="card" style="margin-top: 20px;">
+            <h2>👨‍🏫 Tutors List</h2>
+            <table>
+                <thead>
+                    <tr><th>Name</th><th>Phone</th><th>Email</th><th>Availability</th></tr>
+                </thead>
+                <tbody id="tutorsTable"></tbody>
+            </table>
+        </div>
+        
+        <!-- Sessions Table -->
+        <div class="card" style="margin-top: 20px;">
+            <h2>📅 Upcoming Sessions</h2>
+            <table>
+                <thead>
+                    <tr><th>Student</th><th>Tutor</th><th>Date</th><th>Time</th><th>Link</th></tr>
+                </thead>
+                <tbody id="sessionsTable"></tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div id="message" class="message"></div>
+    
+    <script>
+        const API = window.location.origin;
+        
+        function showMessage(text, type = 'success') {
+            const msg = document.getElementById('message');
+            msg.textContent = text;
+            msg.className = 'message ' + type;
+            msg.style.display = 'block';
+            setTimeout(() => msg.style.display = 'none', 3000);
+        }
+        
+        async function loadData() {
+            try {
+                // Load students
+                const studentsRes = await fetch(API + '/api/students');
+                const students = await studentsRes.json();
+                
+                let studentHtml = '';
+                let studentOptions = '';
+                students.forEach(s => {
+                    studentHtml += \`<tr>
+                        <td>\${s.name}</td>
+                        <td>\${s.parentName}</td>
+                        <td>\${s.parentPhone}</td>
+                        <td>\${s.level}</td>
+                        <td>\${s.assignedTutor?.name || 'Not assigned'}</td>
+                    </tr>\`;
+                    studentOptions += \`<option value="\${s._id}">\${s.name} (\${s.parentPhone})</option>\`;
+                });
+                document.getElementById('studentsTable').innerHTML = studentHtml;
+                document.getElementById('assignStudent').innerHTML = studentOptions;
+                document.getElementById('totalStudents').textContent = students.length;
+                
+                // Load tutors
+                const tutorsRes = await fetch(API + '/api/tutors');
+                const tutors = await tutorsRes.json();
+                
+                let tutorHtml = '';
+                let tutorOptions = '';
+                tutors.forEach(t => {
+                    tutorHtml += \`<tr>
+                        <td>\${t.name}</td>
+                        <td>\${t.phone}</td>
+                        <td>\${t.email}</td>
+                        <td>\${t.availability.map(a => a.day).join(', ')}</td>
+                    </tr>\`;
+                    tutorOptions += \`<option value="\${t._id}">\${t.name}</option>\`;
+                });
+                document.getElementById('tutorsTable').innerHTML = tutorHtml;
+                document.getElementById('assignTutor').innerHTML = tutorOptions;
+                document.getElementById('totalTutors').textContent = tutors.length;
+                
+                // Load today's sessions count
+                const today = new Date().toISOString().split('T')[0];
+                const sessionsRes = await fetch(API + '/api/sessions/all');
+                if (sessionsRes.ok) {
+                    const sessions = await sessionsRes.json();
+                    const todaySessions = sessions.filter(s => 
+                        new Date(s.date).toISOString().split('T')[0] === today
+                    );
+                    document.getElementById('todaySessions').textContent = todaySessions.length;
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+        
+        async function addStudent() {
+            const student = {
+                name: document.getElementById('studentName').value,
+                parentName: document.getElementById('parentName').value,
+                parentPhone: document.getElementById('parentPhone').value,
+                age: document.getElementById('age').value,
+                level: document.getElementById('level').value
+            };
+            
+            try {
+                const res = await fetch(API + '/api/students', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(student)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showMessage('Student added successfully!');
+                    loadData();
+                    // Clear form
+                    document.getElementById('studentName').value = '';
+                    document.getElementById('parentName').value = '';
+                    document.getElementById('parentPhone').value = '';
+                    document.getElementById('age').value = '';
+                }
+            } catch (error) {
+                showMessage('Error adding student', 'error');
+            }
+        }
+        
+        async function addTutor() {
+            const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const availability = [];
+            days.forEach(day => {
+                if (document.querySelector(\`input[value="\${day}"]\`).checked) {
+                    availability.push({day, startTime: '09:00', endTime: '21:00'});
+                }
+            });
+            
+            const tutor = {
+                name: document.getElementById('tutorName').value,
+                phone: document.getElementById('tutorPhone').value,
+                email: document.getElementById('tutorEmail').value,
+                availability
+            };
+            
+            try {
+                const res = await fetch(API + '/api/tutors', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(tutor)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showMessage('Tutor added successfully!');
+                    loadData();
+                    // Clear form
+                    document.getElementById('tutorName').value = '';
+                    document.getElementById('tutorPhone').value = '';
+                    document.getElementById('tutorEmail').value = '';
+                    document.querySelectorAll('input[type=checkbox]').forEach(c => c.checked = false);
+                }
+            } catch (error) {
+                showMessage('Error adding tutor', 'error');
+            }
+        }
+        
+        async function assignTutor() {
+            const studentId = document.getElementById('assignStudent').value;
+            const tutorId = document.getElementById('assignTutor').value;
+            
+            try {
+                const res = await fetch(API + '/api/assign', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({studentId, tutorId})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showMessage('Tutor assigned successfully!');
+                    loadData();
+                }
+            } catch (error) {
+                showMessage('Error assigning tutor', 'error');
+            }
+        }
+        
+        async function triggerSessions() {
+            try {
+                const res = await fetch(API + '/api/trigger-sessions', {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                showMessage(data.message || 'Sessions created!');
+            } catch (error) {
+                showMessage('Error creating sessions', 'error');
+            }
+        }
+        
+        // Load data every 30 seconds
+        loadData();
+        setInterval(loadData, 30000);
+    </script>
+</body>
+</html>
+  `);
+});
+
+// Get all sessions (for admin dashboard)
+app.get('/api/sessions/all', async (req, res) => {
+  try {
+    const sessions = await Session.find({ date: { $gte: new Date() } })
+      .populate('student')
+      .populate('tutor')
+      .sort({ date: 1 });
+    res.json(sessions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== START SERVER ====================
 const PORT = 3000;
 app.listen(PORT, () => {
@@ -390,4 +846,5 @@ app.listen(PORT, () => {
   console.log(`📅 Scheduler: Runs daily at 12 AM`);
   console.log(`📱 WhatsApp: Ready`);
   console.log(`🎥 Zoom: Ready`);
+  console.log(`📊 Admin Dashboard: http://localhost:${PORT}/admin`);
 });
