@@ -291,11 +291,93 @@ app.get('/api/students', async (req, res) => {
   }
 });
 
+// Get a single student by ID
+app.get('/api/students/:id', async (req, res) => {
+  try {
+    const student = await Student.findById(req.params.id).populate('assignedTutor');
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+    res.json(student);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get all tutors
 app.get('/api/tutors', async (req, res) => {
   try {
     const tutors = await Tutor.find();
     res.json(tutors);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get a single tutor by ID
+app.get('/api/tutors/:id', async (req, res) => {
+  try {
+    const tutor = await Tutor.findById(req.params.id);
+    if (!tutor) {
+      return res.status(404).json({ error: 'Tutor not found' });
+    }
+    res.json(tutor);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Manual trigger for testing (optional)
+app.post('/api/trigger-sessions', async (req, res) => {
+  try {
+    console.log('🔄 Manually triggering session creation...');
+    
+    const students = await Student.find({ assignedTutor: { $ne: null } }).populate('assignedTutor');
+    let createdCount = 0;
+    
+    for (const student of students) {
+      const tutor = student.assignedTutor;
+      
+      for (let i = 0; i < 7; i++) {
+        const date = moment().tz('Asia/Karachi').add(i, 'days');
+        const dayName = date.format('dddd');
+        
+        const worksToday = tutor.availability?.some(a => a.day === dayName);
+        
+        if (worksToday) {
+          const exists = await Session.findOne({
+            student: student._id,
+            date: {
+              $gte: date.startOf('day').toDate(),
+              $lte: date.endOf('day').toDate()
+            }
+          });
+          
+          if (!exists) {
+            const meeting = await zoomService.createMeeting(
+              `Quran Session - ${student.name}`,
+              date.format('YYYY-MM-DD') + 'T17:00:00'
+            );
+            
+            if (meeting) {
+              const session = new Session({
+                student: student._id,
+                tutor: tutor._id,
+                date: date.toDate(),
+                time: '17:00',
+                zoomLink: meeting.join_url,
+                zoomMeetingId: meeting.id
+              });
+              
+              await session.save();
+              createdCount++;
+            }
+          }
+        }
+      }
+    }
+    
+    res.json({ success: true, message: `Created ${createdCount} sessions` });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
