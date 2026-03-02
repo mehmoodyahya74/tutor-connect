@@ -246,12 +246,36 @@ app.post('/api/students', async (req, res) => {
   }
 });
 
+// Delete a student
+app.delete('/api/students/:id', async (req, res) => {
+  try {
+    await Student.findByIdAndDelete(req.params.id);
+    // Also remove from sessions
+    await Session.updateMany({ student: req.params.id }, { $unset: { student: 1 } });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Add a new tutor
 app.post('/api/tutors', async (req, res) => {
   try {
     const tutor = new Tutor(req.body);
     await tutor.save();
     res.json({ success: true, tutor });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a tutor
+app.delete('/api/tutors/:id', async (req, res) => {
+  try {
+    await Tutor.findByIdAndDelete(req.params.id);
+    // Unassign from students
+    await Student.updateMany({ assignedTutor: req.params.id }, { $unset: { assignedTutor: 1 } });
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -276,6 +300,16 @@ app.get('/api/sessions/:studentId', async (req, res) => {
       date: { $gte: new Date() }
     }).populate('tutor');
     res.json(sessions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a session
+app.delete('/api/sessions/:id', async (req, res) => {
+  try {
+    await Session.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -327,7 +361,20 @@ app.get('/api/tutors/:id', async (req, res) => {
   }
 });
 
-// Manual trigger for testing (optional)
+// Get all sessions (for admin)
+app.get('/api/sessions/all', async (req, res) => {
+  try {
+    const sessions = await Session.find({ date: { $gte: new Date() } })
+      .populate('student')
+      .populate('tutor')
+      .sort({ date: 1 });
+    res.json(sessions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Manual trigger for testing
 app.post('/api/trigger-sessions', async (req, res) => {
   try {
     console.log('🔄 Manually triggering session creation...');
@@ -384,7 +431,6 @@ app.post('/api/trigger-sessions', async (req, res) => {
 });
 
 // ==================== ADMIN DASHBOARD ====================
-// Serve admin page
 app.get('/admin', (req, res) => {
   res.send(`
 <!DOCTYPE html>
@@ -440,6 +486,8 @@ app.get('/admin', (req, res) => {
         button.secondary:hover { background: #1a202c; }
         button.success { background: #38a169; }
         button.success:hover { background: #2f855a; }
+        button.delete { background: #e53e3e; padding: 5px 10px; width: auto; font-size: 12px; }
+        button.delete:hover { background: #c53030; }
         .checkbox-group { 
             display: grid; 
             grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); 
@@ -471,12 +519,6 @@ app.get('/admin', (req, res) => {
             border-bottom: 1px solid #e2e8f0;
         }
         tr:hover { background: #f7fafc; }
-        .badge {
-            background: #e2e8f0;
-            padding: 3px 10px;
-            border-radius: 15px;
-            font-size: 12px;
-        }
         .stats {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -511,6 +553,7 @@ app.get('/admin', (req, res) => {
         }
         .message.success { background: #38a169; }
         .message.error { background: #e53e3e; }
+        .action-cell { display: flex; gap: 5px; }
     </style>
 </head>
 <body>
@@ -620,7 +663,7 @@ app.get('/admin', (req, res) => {
             <h2>📋 Students List</h2>
             <table>
                 <thead>
-                    <tr><th>Name</th><th>Parent</th><th>Phone</th><th>Level</th><th>Tutor</th></tr>
+                    <tr><th>Name</th><th>Parent</th><th>Phone</th><th>Level</th><th>Tutor</th><th>Action</th></tr>
                 </thead>
                 <tbody id="studentsTable"></tbody>
             </table>
@@ -631,7 +674,7 @@ app.get('/admin', (req, res) => {
             <h2>👨‍🏫 Tutors List</h2>
             <table>
                 <thead>
-                    <tr><th>Name</th><th>Phone</th><th>Email</th><th>Availability</th></tr>
+                    <tr><th>Name</th><th>Phone</th><th>Email</th><th>Availability</th><th>Action</th></tr>
                 </thead>
                 <tbody id="tutorsTable"></tbody>
             </table>
@@ -642,7 +685,7 @@ app.get('/admin', (req, res) => {
             <h2>📅 Upcoming Sessions</h2>
             <table>
                 <thead>
-                    <tr><th>Student</th><th>Tutor</th><th>Date</th><th>Time</th><th>Link</th></tr>
+                    <tr><th>Student</th><th>Tutor</th><th>Date</th><th>Time</th><th>Link</th><th>Action</th></tr>
                 </thead>
                 <tbody id="sessionsTable"></tbody>
             </table>
@@ -662,6 +705,57 @@ app.get('/admin', (req, res) => {
             setTimeout(() => msg.style.display = 'none', 3000);
         }
         
+        async function deleteStudent(id) {
+            if (!confirm('⚠️ Are you sure you want to delete this student? This will also remove them from sessions.')) return;
+            
+            try {
+                const res = await fetch(API + '/api/students/' + id, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showMessage('Student deleted successfully!');
+                    loadData();
+                }
+            } catch (error) {
+                showMessage('Error deleting student', 'error');
+            }
+        }
+        
+        async function deleteTutor(id) {
+            if (!confirm('⚠️ Are you sure you want to delete this tutor? This will unassign them from all students.')) return;
+            
+            try {
+                const res = await fetch(API + '/api/tutors/' + id, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showMessage('Tutor deleted successfully!');
+                    loadData();
+                }
+            } catch (error) {
+                showMessage('Error deleting tutor', 'error');
+            }
+        }
+        
+        async function deleteSession(id) {
+            if (!confirm('⚠️ Are you sure you want to delete this session?')) return;
+            
+            try {
+                const res = await fetch(API + '/api/sessions/' + id, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showMessage('Session deleted successfully!');
+                    loadData();
+                }
+            } catch (error) {
+                showMessage('Error deleting session', 'error');
+            }
+        }
+        
         async function loadData() {
             try {
                 // Load students
@@ -677,6 +771,7 @@ app.get('/admin', (req, res) => {
                         <td>\${s.parentPhone}</td>
                         <td>\${s.level}</td>
                         <td>\${s.assignedTutor?.name || 'Not assigned'}</td>
+                        <td><button class="delete" onclick="deleteStudent('\${s._id}')">Delete</button></td>
                     </tr>\`;
                     studentOptions += \`<option value="\${s._id}">\${s.name} (\${s.parentPhone})</option>\`;
                 });
@@ -696,6 +791,7 @@ app.get('/admin', (req, res) => {
                         <td>\${t.phone}</td>
                         <td>\${t.email}</td>
                         <td>\${t.availability.map(a => a.day).join(', ')}</td>
+                        <td><button class="delete" onclick="deleteTutor('\${t._id}')">Delete</button></td>
                     </tr>\`;
                     tutorOptions += \`<option value="\${t._id}">\${t.name}</option>\`;
                 });
@@ -703,15 +799,31 @@ app.get('/admin', (req, res) => {
                 document.getElementById('assignTutor').innerHTML = tutorOptions;
                 document.getElementById('totalTutors').textContent = tutors.length;
                 
-                // Load today's sessions count
-                const today = new Date().toISOString().split('T')[0];
+                // Load sessions
                 const sessionsRes = await fetch(API + '/api/sessions/all');
                 if (sessionsRes.ok) {
                     const sessions = await sessionsRes.json();
+                    
+                    // Update today's sessions count
+                    const today = new Date().toISOString().split('T')[0];
                     const todaySessions = sessions.filter(s => 
                         new Date(s.date).toISOString().split('T')[0] === today
                     );
                     document.getElementById('todaySessions').textContent = todaySessions.length;
+                    
+                    // Build sessions table
+                    let sessionHtml = '';
+                    sessions.forEach(s => {
+                        sessionHtml += \`<tr>
+                            <td>\${s.student?.name || 'Deleted'}</td>
+                            <td>\${s.tutor?.name || 'Deleted'}</td>
+                            <td>\${new Date(s.date).toLocaleDateString()}</td>
+                            <td>\${s.time}</td>
+                            <td><a href="\${s.zoomLink}" target="_blank">Link</a></td>
+                            <td><button class="delete" onclick="deleteSession('\${s._id}')">Delete</button></td>
+                        </tr>\`;
+                    });
+                    document.getElementById('sessionsTable').innerHTML = sessionHtml;
                 }
             } catch (error) {
                 console.error('Error loading data:', error);
@@ -806,12 +918,15 @@ app.get('/admin', (req, res) => {
         }
         
         async function triggerSessions() {
+            if (!confirm('Create sessions for next 7 days?')) return;
+            
             try {
                 const res = await fetch(API + '/api/trigger-sessions', {
                     method: 'POST'
                 });
                 const data = await res.json();
                 showMessage(data.message || 'Sessions created!');
+                loadData();
             } catch (error) {
                 showMessage('Error creating sessions', 'error');
             }
@@ -824,19 +939,6 @@ app.get('/admin', (req, res) => {
 </body>
 </html>
   `);
-});
-
-// Get all sessions (for admin dashboard)
-app.get('/api/sessions/all', async (req, res) => {
-  try {
-    const sessions = await Session.find({ date: { $gte: new Date() } })
-      .populate('student')
-      .populate('tutor')
-      .sort({ date: 1 });
-    res.json(sessions);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
 });
 
 // ==================== START SERVER ====================
