@@ -417,7 +417,26 @@ app.post('/api/trigger-sessions', async (req, res) => {
               });
               
               await session.save();
+
+              // Send WhatsApp to parent
+              await whatsappService.sendSessionLink(
+                student.parentPhone,
+                student.name,
+                date.format('MMMM Do, YYYY'),
+                '5:00 PM',
+                meeting.join_url
+              );
+              
+              // Send WhatsApp to tutor
+              await whatsappService.sendMessage(
+                tutor.phone,
+                `*New Session* 🎯\n\nStudent: ${student.name}\nDate: ${date.format('MMMM Do, YYYY')}\nTime: 5:00 PM\nLink: ${meeting.join_url}`
+              );
+
               createdCount++;
+              
+              // Wait 1 second between messages to avoid rate limiting
+              await new Promise(resolve => setTimeout(resolve, 1000));
             }
           }
         }
