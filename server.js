@@ -292,6 +292,19 @@ app.post('/api/assign', async (req, res) => {
   }
 });
 
+// Get all sessions (for admin)
+app.get('/api/admin/sessions', async (req, res) => {
+  try {
+    const sessions = await Session.find({ date: { $gte: new Date() } })
+      .populate('student')
+      .populate('tutor')
+      .sort({ date: 1 });
+    res.json(sessions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get all sessions for a student
 app.get('/api/sessions/:studentId', async (req, res) => {
   try {
@@ -299,75 +312,6 @@ app.get('/api/sessions/:studentId', async (req, res) => {
       student: req.params.studentId,
       date: { $gte: new Date() }
     }).populate('tutor');
-    res.json(sessions);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Delete a session
-app.delete('/api/sessions/:id', async (req, res) => {
-  try {
-    await Session.findByIdAndDelete(req.params.id);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get all students
-app.get('/api/students', async (req, res) => {
-  try {
-    const students = await Student.find().populate('assignedTutor');
-    res.json(students);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get a single student by ID
-app.get('/api/students/:id', async (req, res) => {
-  try {
-    const student = await Student.findById(req.params.id).populate('assignedTutor');
-    if (!student) {
-      return res.status(404).json({ error: 'Student not found' });
-    }
-    res.json(student);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get all tutors
-app.get('/api/tutors', async (req, res) => {
-  try {
-    const tutors = await Tutor.find();
-    res.json(tutors);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get a single tutor by ID
-app.get('/api/tutors/:id', async (req, res) => {
-  try {
-    const tutor = await Tutor.findById(req.params.id);
-    if (!tutor) {
-      return res.status(404).json({ error: 'Tutor not found' });
-    }
-    res.json(tutor);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get all sessions (for admin)
-app.get('/api/sessions/all', async (req, res) => {
-  try {
-    const sessions = await Session.find({ date: { $gte: new Date() } })
-      .populate('student')
-      .populate('tutor')
-      .sort({ date: 1 });
     res.json(sessions);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -819,7 +763,7 @@ app.get('/admin', (req, res) => {
                 document.getElementById('totalTutors').textContent = tutors.length;
                 
                 // Load sessions
-                const sessionsRes = await fetch(API + '/api/sessions/all');
+                const sessionsRes = await fetch('/api/admin/sessions');
                 if (sessionsRes.ok) {
                     const sessions = await sessionsRes.json();
                     
