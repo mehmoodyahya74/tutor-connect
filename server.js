@@ -187,9 +187,10 @@ cron.schedule('0 0 * * *', async () => {
             console.log(`Creating session for ${student.name} on ${date.format('YYYY-MM-DD')}`);
             
             // Create Zoom meeting
+            const meetingDate = date.clone().set({ hour: 17, minute: 0, second: 0 });
             const meeting = await zoomService.createMeeting(
               `Quran Session - ${student.name}`,
-              date.format('YYYY-MM-DD') + 'T17:00:00'
+              meetingDate.format('YYYY-MM-DDTHH:mm:ss')
             );
             
             if (meeting) {
@@ -240,42 +241,13 @@ app.post('/api/students', async (req, res) => {
   try {
     const student = new Student(req.body);
     await student.save();
+    
+    // If student is added with a tutor, trigger session creation immediately
+    if (student.assignedTutor) {
+      triggerSessionCreationForStudent(student._id);
+    }
+    
     res.json({ success: true, student });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Delete a student
-app.delete('/api/students/:id', async (req, res) => {
-  try {
-    await Student.findByIdAndDelete(req.params.id);
-    // Also remove from sessions
-    await Session.updateMany({ student: req.params.id }, { $unset: { student: 1 } });
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Add a new tutor
-app.post('/api/tutors', async (req, res) => {
-  try {
-    const tutor = new Tutor(req.body);
-    await tutor.save();
-    res.json({ success: true, tutor });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Delete a tutor
-app.delete('/api/tutors/:id', async (req, res) => {
-  try {
-    await Tutor.findByIdAndDelete(req.params.id);
-    // Unassign from students
-    await Student.updateMany({ assignedTutor: req.params.id }, { $unset: { assignedTutor: 1 } });
-    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -286,11 +258,76 @@ app.post('/api/assign', async (req, res) => {
   try {
     const { studentId, tutorId } = req.body;
     await Student.findByIdAndUpdate(studentId, { assignedTutor: tutorId });
+    
+    // Trigger session creation immediately after assignment
+    triggerSessionCreationForStudent(studentId);
+    
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Helper function to trigger session creation
+async function triggerSessionCreationForStudent(studentId) {
+  try {
+    const student = await Student.findById(studentId).populate('assignedTutor');
+    if (!student || !student.assignedTutor) return;
+
+    const tutor = student.assignedTutor;
+    for (let i = 0; i < 7; i++) {
+      const date = moment().tz('Asia/Karachi').add(i, 'days');
+      const dayName = date.format('dddd');
+      const worksToday = tutor.availability?.some(a => a.day === dayName);
+
+      if (worksToday) {
+        const exists = await Session.findOne({
+          student: student._id,
+          date: {
+            $gte: date.startOf('day').toDate(),
+            $lte: date.endOf('day').toDate()
+          }
+        });
+
+        if (!exists) {
+          const meetingDate = date.clone().set({ hour: 17, minute: 0, second: 0 });
+          const meeting = await zoomService.createMeeting(
+            `Quran Session - ${student.name}`,
+            meetingDate.format('YYYY-MM-DDTHH:mm:ss')
+          );
+
+          if (meeting) {
+            const session = new Session({
+              student: student._id,
+              tutor: tutor._id,
+              date: date.toDate(),
+              time: '17:00',
+              zoomLink: meeting.join_url,
+              zoomMeetingId: meeting.id
+            });
+            await session.save();
+
+            await whatsappService.sendSessionLink(
+              student.parentPhone,
+              student.name,
+              date.format('MMMM Do, YYYY'),
+              '5:00 PM',
+              meeting.join_url
+            );
+
+            await whatsappService.sendMessage(
+              tutor.phone,
+              `*New Session* 🎯\n\nStudent: ${student.name}\nDate: ${date.format('MMMM Do, YYYY')}\nTime: 5:00 PM\nLink: ${meeting.join_url}`
+            );
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error in immediate session creation:', err);
+  }
+}
 
 // Get all sessions for a student
 app.get('/api/sessions/:studentId', async (req, res) => {
@@ -401,9 +438,10 @@ app.post('/api/trigger-sessions', async (req, res) => {
           });
           
           if (!exists) {
+            const meetingDate = date.clone().set({ hour: 17, minute: 0, second: 0 });
             const meeting = await zoomService.createMeeting(
               `Quran Session - ${student.name}`,
-              date.format('YYYY-MM-DD') + 'T17:00:00'
+              meetingDate.format('YYYY-MM-DDTHH:mm:ss')
             );
             
             if (meeting) {
@@ -961,8 +999,8 @@ app.get('/admin', (req, res) => {
 });
 
 // ==================== START SERVER ====================
-const PORT = 3000;
-app.listen(PORT, () => {
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Tutor Connect server running on port ${PORT}`);
   console.log(`📅 Scheduler: Runs daily at 12 AM`);
   console.log(`📱 WhatsApp: Ready`);
